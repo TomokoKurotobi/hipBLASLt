@@ -2929,8 +2929,12 @@ void testing_matmul_with_bias(const Arguments& arg,
                 }
                 else
                 {
-                    for(int i = 0; i < number_cold_calls; i++)
+                    for(int i = 0; i < number_cold_calls+1; i++)
                     {
+                        if (i == 1)
+                        {
+                            gpu_time_used = get_time_us_sync(stream);
+                        }
                         auto ptr_matmul = matmul[i % block_count][0];
                         auto ptr_alpha  = arg.scaleAlpha_vector
                                               ? (dScaleAlphaVec[0].as<char>())
@@ -2962,6 +2966,10 @@ void testing_matmul_with_bias(const Arguments& arg,
                         if(i == 0 && (arg.unit_check || arg.norm_check || arg.allclose_check))
                             copy_gemm_to_host(stream, gemm_count, hD_1, (*dDp));
                     }
+                    gpu_time_used = (get_time_us_sync(stream) - gpu_time_used)/1000; // ms
+                    hipblaslt_cout << "gpu_time_used: " << gpu_time_used << " ms / " << number_cold_calls << " calls" << std::endl;
+                    number_hot_calls = 3000 / gpu_time_used * number_cold_calls; // Compute 3s iteration 
+
                     freq_monitor.start();
                     if(arg.use_gpu_timer)
                         CHECK_HIP_ERROR(hipEventRecord(event_gpu_time_start, stream));

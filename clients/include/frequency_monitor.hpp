@@ -41,6 +41,7 @@ public:
     virtual std::vector<double> getAllMedianSYSCLK()     = 0;
     virtual double              getAverageMEMCLK()       = 0;
     virtual double              getMedianMEMCLK()        = 0;
+    virtual int dump(const std::string &file_name)                               = 0;
 };
 
 FrequencyMonitor& getFrequencyMonitor();

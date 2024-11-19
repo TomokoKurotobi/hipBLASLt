@@ -78,4 +78,19 @@ void ArgumentModel_log_frequencies(hipblaslt_internal_ostream& name_line,
 
     name_line << ",median-MCLK";
     val_line << "," << frequency_monitor.getMedianMEMCLK();
+
+
+    // Temporarily, dump timeline of frequencies to a file
+    // Filename from timestamp
+    std::time_t t = std::time(nullptr);
+    std::tm     tm = *std::localtime(&t);
+    char        fname[100];
+    std::strftime(fname, sizeof(fname), "freq_timeline_%Y%m%d_%H%M%S.csv", &tm);
+    const auto err = frequency_monitor.dump(fname);
+    name_line << ",timeline filename";
+    if(err == 0)
+        val_line << "," << fname;
+    else
+        val_line << "," << err;
+
 }

@@ -30,6 +30,7 @@
 #include <mutex>
 #include <thread>
 #include <vector>
+#include <fstream>
 
 #ifndef _WIN32
 
@@ -129,6 +130,33 @@ public:
 
         m_cv.notify_all();
         m_thread.join();
+    }
+
+
+    int dump(const std::string& file_name){
+        if(m_SYSCLK_array.size() == 0 || (m_SYSCLK_array[0].size() != m_MEMCLK_array.size())){
+            return -1;
+        }
+        std::ofstream file;
+        file.open(file_name);
+        if(!file.is_open()){
+            return -2;
+        }
+        // CSV format
+        file << "Time[ms],";
+        for(int i = 0; i < m_XCDCount; i++){
+            file << "SYSCLOK XCD " << i << ",";
+        }
+        file << "MEMCLK" << std::endl;
+        for (int i = 0; i < m_SYSCLK_array[0].size(); i++){
+            file << i * 50 << ",";
+            for(int j = 0; j < m_XCDCount; j++){
+                file << m_SYSCLK_array[j][i] << ",";
+            }
+            file << m_MEMCLK_array[i] << std::endl;
+        }
+        file.close();
+        return 0;
     }
 
     void set_device_id(int deviceId)
@@ -468,6 +496,8 @@ public:
     FrequencyMonitorImp() {}
 
     ~FrequencyMonitorImp() {}
+
+    int dump(cons std::string& file_name){ return 0;}
 
     void set_device_id(int deviceId) {}
 
