@@ -2896,6 +2896,7 @@ void testing_matmul_with_bias(const Arguments& arg,
 
         for(size_t sol = 0; sol < heuristicResult.size(); sol++)
         {
+            float shortest_gpu_ms_per_call = 0;
             if(!do_grouped_gemm)
             {
                 FrequencyMonitor& freq_monitor = getFrequencyMonitor();
@@ -2968,7 +2969,12 @@ void testing_matmul_with_bias(const Arguments& arg,
                     }
                     gpu_time_used = (get_time_us_sync(stream) - gpu_time_used)/1000; // ms
                     hipblaslt_cout << "gpu_time_used: " << gpu_time_used << " ms / " << number_cold_calls << " calls" << std::endl;
-                    number_hot_calls = 3000 / gpu_time_used * number_cold_calls; // Compute 3s iteration 
+                    const auto ms_per_call = gpu_time_used / number_cold_calls;
+
+                    if (sol > 0 && ms_per_call > 3 * shortest_gpu_ms_per_call){
+                        hipblaslt_cout << "skip solution " << sol << " due to slow cold call" << std::endl;
+                        continue;
+                    }
 
                     freq_monitor.start();
                     if(arg.use_gpu_timer)
@@ -3026,6 +3032,14 @@ void testing_matmul_with_bias(const Arguments& arg,
                 }
 
                 freq_monitor.stop();
+                const auto time_ms_per_call = gpu_time_used / 1000 / number_hot_calls;
+                if (sol == 0){
+                    shortest_gpu_ms_per_call = time_ms_per_call;
+                }else{
+                    if (time_ms_per_call < shortest_gpu_ms_per_call){
+                        shortest_gpu_ms_per_call = time_ms_per_call;
+                    }
+                }
             }
             else
             {
