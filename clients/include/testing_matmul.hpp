@@ -50,6 +50,7 @@
 #include <map>
 #include <omp.h>
 #include <set>
+#include <fstream>
 
 extern "C" __global__ void flush_icache()
 {
@@ -2955,6 +2956,14 @@ void testing_matmul_with_bias(const Arguments& arg,
             flush_time_used /= flush_iter;
         }
 
+        // Prepare array
+        // sol, i, gpu_time[us]
+        struct ItrTime{
+            size_t    sol;
+            int    cold_itr_idx;
+            double gpu_time;
+        };
+        ItrTime *itr_time = new ItrTime[heuristicResult.size() * number_cold_calls];
         for(size_t sol = 0; sol < heuristicResult.size(); sol++)
         {
             if((arg.unit_check || arg.norm_check || arg.allclose_check) && arg.c_equal_d)
@@ -3025,6 +3034,8 @@ void testing_matmul_with_bias(const Arguments& arg,
                                               ? (dScaleAlphaVec[0].as<char>())
                                                    + (i % block_count) * size_scaleAlphaVec[0]
                                               : alpha_in[0];
+                        pre_gpu_time(
+                            arg.use_gpu_timer, event_gpu_time_start, gpu_time_used, stream);
                         EXPECT_HIPBLAS_STATUS(
                             hipblasLtMatmul(
                                 handle,
@@ -3048,9 +3059,16 @@ void testing_matmul_with_bias(const Arguments& arg,
                                 workspace_size,
                                 stream),
                             HIPBLAS_STATUS_SUCCESS);
+                        post_gpu_time(arg.use_gpu_timer,
+                                      event_gpu_time_start,
+                                      event_gpu_time_end,
+                                      gpu_time_used,
+                                      stream);
+                        itr_time[sol * number_cold_calls + i] = {sol, i, gpu_time_used};
                         if(i == 0 && (arg.unit_check || arg.norm_check || arg.allclose_check))
                             copy_gemm_to_host(stream, gemm_count, hD_1, (*dDp));
                     }
+                    continue; // Skip hot iteration
                     if(arg.skip_slow_solution_ratio)
                     {
                         post_gpu_time(arg.use_gpu_timer,
@@ -3378,6 +3396,23 @@ void testing_matmul_with_bias(const Arguments& arg,
                 best_atol     = hipblaslt_atol;
                 best_rtol     = hipblaslt_rtol;
             }
+        }
+
+        // Dump itr_time to csv file
+        std::ofstream file("itr_time.csv");
+        if(file.is_open())
+        {
+            file << "sol,cold_itr_idx,gpu_time[us]\n";
+            for(size_t sol = 0; sol < heuristicResult.size(); sol++)
+            {
+                for(int i = 0; i < number_cold_calls; i++)
+                {
+                    file << itr_time[sol * number_cold_calls + i].sol << ","
+                            << itr_time[sol * number_cold_calls + i].cold_itr_idx << ","
+                            << itr_time[sol * number_cold_calls + i].gpu_time << "\n";
+                }
+            }
+            file.close();
         }
 
         if(heuristicResult.size() > 1)
