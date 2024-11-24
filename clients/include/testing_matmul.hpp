@@ -3020,10 +3020,6 @@ void testing_matmul_with_bias(const Arguments& arg,
                             arg.use_gpu_timer, event_gpu_time_start, gpu_time_used, stream);
                     for(int i = 0; i < number_cold_calls; i++)
                     {
-                        if (i == 1)
-                        {
-                            gpu_time_used = get_time_us_sync(stream);
-                        }
                         auto ptr_matmul = matmul[i % block_count][0];
                         auto ptr_alpha  = arg.scaleAlpha_vector
                                               ? (dScaleAlphaVec[0].as<char>())
@@ -3117,14 +3113,6 @@ void testing_matmul_with_bias(const Arguments& arg,
                               gpu_time_used,
                               stream);
                 freq_monitor.stop();
-                const auto time_ms_per_call = gpu_time_used / 1000 / number_hot_calls;
-                if (sol == 0){
-                    shortest_gpu_ms_per_call = time_ms_per_call;
-                }else{
-                    if (time_ms_per_call < shortest_gpu_ms_per_call){
-                        shortest_gpu_ms_per_call = time_ms_per_call;
-                    }
-                }
             }
             else
             {
