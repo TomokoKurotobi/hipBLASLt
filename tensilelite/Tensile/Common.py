@@ -72,6 +72,14 @@ globalParameters["SyncsPerBenchmark"] = 1         # how iterations of the stream
 globalParameters["EnqueuesPerSync"] = 1           # how many solution enqueues to perform per synchronization
 globalParameters["MaxEnqueuesPerSync"] = -1       # max solution enqueues to perform per synchronization
 globalParameters["SleepPercent"] = 300            # how long to sleep after every data point: 25 means 25% of solution time. Sleeping lets gpu cool down more.
+globalParameters["SkipSlowSolutionRatio"] = 0.0   # Skip slow solution during warm-up stage.
+# The valid range of this ratio is (0.0 ~ 1.0), and 0.0 means no skipping.
+# Skip condition:  warm-up time * ratio > current best sol's warm-up time
+# Suggestion:
+#     Small size :  0.5
+#     Medium size: 0.75
+#     Large size :  0.9
+
 # cProfile
 globalParameters["Profiler"] = 0                  # Enable profiler. 0=off, 1=cProfile. This will set CpuThreads to 1.
 # validation
@@ -173,6 +181,7 @@ globalParameters["CMakeCXXFlags"] = ""            # pass flags to cmake
 globalParameters["CMakeCFlags"] = ""              # pass flags to cmake
 globalParameters["DebugKernel"] = False           # assembly only, kernel gets buffer for debug "printing"; kernel writes data to memory, gets coppied to host and printed
 globalParameters["LibraryPrintDebug"] = False     # solutions will print enqueue info when enqueueing a kernel
+globalParameters["AsanBuild"] = False             # build with asan
 globalParameters["SaveTemps"] = False             # Generate intermediate results of hip kernels
 globalParameters["KeepBuildTmp"] = False          # If true, do not remove artifacts in build_tmp
 
@@ -228,7 +237,7 @@ globalParameters["LibraryUpdateComment"] = False                  # Include solu
 
 # internal, i.e., gets set during startup
 globalParameters["CurrentISA"] = (0,0,0)
-globalParameters["ROCmAgentEnumeratorPath"] = None      # /opt/rocm/bin/rocm_agent_enumerator
+globalParameters["AMDGPUArchPath"] = None      # /opt/rocm/llvm/bin/amdgpu-arch
 globalParameters["ROCmSMIPath"] = None                  # /opt/rocm/bin/rocm-smi
 globalParameters["AssemblerPath"] = None                # /opt/rocm/llvm/bin/clang++
 globalParameters["WorkingPath"] = os.getcwd()           # path where tensile called from
@@ -286,6 +295,8 @@ globalParameters["RotatingMode"] = 0 # Default is 0, allocated in order A0B0C0D0
 globalParameters["BuildIdKind"] = "sha1"
 globalParameters["ValidateLibrary"] = False
 globalParameters["AsmDebug"] = False # Set to True to keep debug information for compiled code objects
+
+globalParameters["UseEffLike"] = True # Set to False to use winnerGFlops as the performance metric
 
 # Save a copy - since pytest doesn't re-run this initialization code and YAML files can override global settings - odd things can happen
 defaultGlobalParameters = deepcopy(globalParameters)
@@ -942,9 +953,9 @@ validParameters = {
     # TENSILE_STREAMK_FIXED_GRID lets you override the default grid size with a specific number
     #   0 = override disabled (default)
     # TENSILE_STREAMK_FULL_TILES sets the number of full tiles to be included in stream-k work
-    #   -1 = use prediction model for best performance (default)
+    #   -1 = use prediction model for best performance (not yet implemented)
     #   0 = only remainder tiles run in stream-k
-    #   1+ = remainder + 1 (or more) full grids of tiles run in stream-k
+    #   1+ = remainder + 1 (or more) full grids of tiles run in stream-k (default=1)
     # TENSILE_STREAMK_DYNAMIC_GRID enables dynamic grid mode, which automatically limits the number of CUs used:
     #   0 = Off, use all CUs (default)
     #   1 = Only reduce CUs for small problems to number of output tiles when num_tiles < CU count.
@@ -1118,6 +1129,8 @@ validParameters = {
 
     "MaxVgprNumber":                list(range(0,257)),
 
+    "TotalVgprNumber":              list(range(0,513)),
+
     # Debug use only.
     "ActivationFused":             [False, True],
 
@@ -1230,6 +1243,7 @@ defaultBenchmarkCommonParameters = [
     {"NoReject":                  [ False ]},
     {"MinVgprNumber":             [0]},
     {"MaxVgprNumber":             [256]},
+    {"TotalVgprNumber":           [512]},
     {"StoreRemapVectorWidth":     [ 0 ] },
     {"SourceSwap":                [ False ] },
     {"StorePriorityOpt":          [ False ] },
@@ -1495,8 +1509,8 @@ def detectGlobalCurrentISA():
   """
   global globalParameters
 
-  if globalParameters["CurrentISA"] == (0,0,0) and globalParameters["ROCmAgentEnumeratorPath"]:
-    process = subprocess.run([globalParameters["ROCmAgentEnumeratorPath"]], stdout=subprocess.PIPE)
+  if globalParameters["CurrentISA"] == (0,0,0) and globalParameters["AMDGPUArchPath"]:
+    process = subprocess.run([globalParameters["AMDGPUArchPath"]], stdout=subprocess.PIPE)
     if os.name == "nt":
       line = ""
       for line_in in process.stdout.decode().splitlines():
@@ -1519,7 +1533,7 @@ def detectGlobalCurrentISA():
       if len(archList) > 0:
         globalParameters["CurrentISA"] = archList[globalParameters["Device"]]
     if (process.returncode):
-      printWarning("%s exited with code %u" % (globalParameters["ROCmAgentEnumeratorPath"], process.returncode))
+      printWarning("%s exited with code %u" % (globalParameters["AMDGPUArchPath"], process.returncode))
     return process.returncode
   return 0
 
@@ -1644,11 +1658,11 @@ def assignGlobalParameters( config ):
 
   globalParameters["ROCmBinPath"] = os.path.join(globalParameters["ROCmPath"], "bin")
 
-  # ROCm Agent Enumerator Path
+  # ROCm AMD GPU Arch Path
   if os.name == "nt":
-    globalParameters["ROCmAgentEnumeratorPath"] = locateExe(globalParameters["ROCmBinPath"], "hipinfo.exe")
+    globalParameters["AMDGPUArchPath"] = locateExe(globalParameters["ROCmBinPath"], "hipinfo.exe")
   else:
-    globalParameters["ROCmAgentEnumeratorPath"] = locateExe(globalParameters["ROCmBinPath"], "rocm_agent_enumerator")
+    globalParameters["AMDGPUArchPath"] = locateExe(globalParameters["ROCmPath"], "llvm/bin/amdgpu-arch")
 
   if "CxxCompiler" in config:
     globalParameters["CxxCompiler"] = config["CxxCompiler"]
@@ -1687,8 +1701,11 @@ def assignGlobalParameters( config ):
     else:
       globalParameters["ClangOffloadBundlerPath"] = locateExe(os.path.join(globalParameters["ROCmPath"], "llvm/bin"), "clang-offload-bundler")
 
-  if "ROCmAgentEnumeratorPath" in config:
-    globalParameters["ROCmAgentEnumeratorPath"] = config["ROCmAgentEnumeratorPath"]
+  if "AMDGPUArchPath" in config:
+    globalParameters["AMDGPUArchPath"] = config["AMDGPUArchPath"]
+
+  if "AsanBuild" in config:
+    globalParameters["AsanBuild"] = config["AsanBuild"]
 
   if "KeepBuildTmp" in config:
       globalParameters["KeepBuildTmp"] = config["KeepBuildTmp"]

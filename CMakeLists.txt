@@ -161,12 +161,12 @@ else()
     if (NOT BUILD_ADDRESS_SANITIZER)
       #Set the AMDGPU_TARGETS with backward compatiblity
       rocm_check_target_ids(DEFAULT_AMDGPU_TARGETS
-          TARGETS "gfx908:xnack+;gfx908:xnack-;gfx90a:xnack+;gfx90a:xnack-;gfx940;gfx941;gfx942;gfx1100;gfx1101;;gfx1200;gfx1201"
+          TARGETS "gfx908:xnack+;gfx908:xnack-;gfx90a:xnack+;gfx90a:xnack-;gfx942;gfx1100;gfx1101;;gfx1200;gfx1201"
       )
     else()
       #build xnack-supported targets only
       rocm_check_target_ids(DEFAULT_AMDGPU_TARGETS
-          TARGETS "gfx908:xnack+;gfx90a:xnack+;gfx940:xnack+;gfx941:xnack+;gfx942:xnack+"
+          TARGETS "gfx908:xnack+;gfx90a:xnack+;gfx942:xnack+"
       )
     endif()
 
@@ -276,9 +276,9 @@ if(HIPBLASLT_ENABLE_MARKER)
 endif()
 
 # Setup version
-set(VERSION_STRING "0.11.0")
+set(VERSION_STRING "0.12.0")
 rocm_setup_version(VERSION ${VERSION_STRING})
-set(hipblaslt_SOVERSION 0.11)
+set(hipblaslt_SOVERSION 0.12)
 
 
 if( BUILD_CLIENTS_SAMPLES OR BUILD_CLIENTS_TESTS OR BUILD_CLIENTS_BENCHMARKS )
@@ -316,7 +316,7 @@ if( BUILD_CLIENTS_SAMPLES OR BUILD_CLIENTS_TESTS OR BUILD_CLIENTS_BENCHMARKS )
     endif()
   elseif(CLIENTS_OS STREQUAL "ubuntu" AND CLIENTS_OS_VERSION VERSION_GREATER_EQUAL "20.04")
     set(GFORTRAN_DEB "libgfortran5")
-  elseif(CLIENTS_OS STREQUAL "mariner")
+  elseif(CLIENTS_OS STREQUAL "mariner" OR CLIENTS_OS STREQUAL "azurelinux")
     set(GFORTRAN_RPM "gfortran")
   endif()
 
@@ -350,7 +350,7 @@ if( NOT BUILD_CUDA )
     rocm_package_add_dependencies(DEPENDS "hipblas >= 0.50.0")
   else()
     set(hipblas_common_minimum 1.0.0)
-    rocm_package_add_deb_dependencies(COMPONENT devel DEPENDS "hipblas-common-dev >= ${hipblas_common_minimum}") 
+    rocm_package_add_deb_dependencies(COMPONENT devel DEPENDS "hipblas-common-dev >= ${hipblas_common_minimum}")
     rocm_package_add_rpm_dependencies(COMPONENT devel DEPENDS "hipblas-common-devel >= ${hipblas_common_minimum}")
   endif()
 endif( )
@@ -369,6 +369,9 @@ if( NOT CPACK_PACKAGING_INSTALL_PREFIX )
 endif()
 
 set( CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION "\${CPACK_PACKAGING_INSTALL_PREFIX}" "\${CPACK_PACKAGING_INSTALL_PREFIX}/include" "\${CPACK_PACKAGING_INSTALL_PREFIX}/lib" )
+
+# work around code object stripping failure if using /usr/bin/strip
+set( CPACK_RPM_SPEC_MORE_DEFINE "%define __strip ${rocm_bin}/../llvm/bin/llvm-strip")
 
 # Give hipblaslt compiled for CUDA backend a different name
 if( NOT USE_CUDA )

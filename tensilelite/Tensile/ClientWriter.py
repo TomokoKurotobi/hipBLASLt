@@ -240,6 +240,9 @@ def getBuildClientLibraryScript(buildPath, libraryLogicPath):
   if globalParameters.get("AsmDebug", False):
     callCreateLibraryCmd += " --asm-debug"
 
+  if globalParameters["KeepBuildTmp"]:
+    callCreateLibraryCmd += " --keep-build-tmp"
+
   callCreateLibraryCmd += " --architecture=" + globalParameters["Architecture"]
   callCreateLibraryCmd += " --code-object-version=" + globalParameters["CodeObjectVersion"]
   callCreateLibraryCmd += " --cxx-compiler=" + globalParameters["CxxCompiler"]
@@ -627,6 +630,7 @@ def writeClientConfigIni(problemSizes, biasTypeArgs, factorDimArgs, activationAr
         param("num-enqueues-per-sync",    globalParameters["EnqueuesPerSync"])
         param("max-enqueues-per-sync",    globalParameters["MaxEnqueuesPerSync"])
         param("num-syncs-per-benchmark",  globalParameters["SyncsPerBenchmark"])
+        param("skip-slow-solution-ratio", globalParameters["SkipSlowSolutionRatio"])
         param("use-gpu-timer",            globalParameters["KernelTime"])
         param("hardware-monitor",         globalParameters["HardwareMonitor"])
         param("num-warmups",              globalParameters["NumWarmups"])

@@ -215,7 +215,6 @@ const char* hipblasOperation_to_string(hipblasOperation_t op)
     case HIPBLAS_OP_T:
         return "OP_T";
     case HIPBLAS_OP_C:
-        return "OP_C";
     default:
         return "Invalid";
     }
@@ -239,6 +238,8 @@ const char* rocblaslt_layer_mode2string(rocblaslt_layer_mode layer_mode)
         return "Api";
     case rocblaslt_layer_mode_log_bench:
         return "Bench";
+    case rocblaslt_layer_mode_log_profile:
+        return "Profile";
     default:
         return "Invalid";
     }

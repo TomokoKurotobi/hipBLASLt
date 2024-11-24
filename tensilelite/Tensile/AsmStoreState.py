@@ -86,7 +86,7 @@ class StoreState:
                 self.numTempSgprPerBatch   = 2 * kernelWriter.states.laneSGPRCount
 
             if self.numMaskSgprPerElement:
-                numSgprAvailable = kernelWriter.consts.maxSgprs - kernelWriter.sgprPool.size() + kernelWriter.sgprPool.availableBlockAtEnd()
+                numSgprAvailable = kernelWriter.states.regCaps["MaxSgpr"] - kernelWriter.sgprPool.size() + kernelWriter.sgprPool.availableBlockAtEnd()
                 numSgprAvailable = numSgprAvailable & ~0x1 # make sure it's aligned
                 #print("numSgprAvailable=", numSgprAvailable)
                 self.numElementsPerBatchLimitedBySgprs = (numSgprAvailable - self.numTempSgprPerBatch - self.numMaskSgprPerBatch) // self.numMaskSgprPerElement
@@ -124,7 +124,7 @@ class StoreState:
             # Really only used if gwvw=1 - edge cases
             # exception: data vgpr cannot be shared if UseInitialStridesCD is enabled and card enable EccHalf,
             #            since each buffer_load_short would overwrite undefined 16bit as zero.
-            self.halfDataRegPerVI = gwvw*self.numVgprsPerDataPerVI == 0.5 and not (kernel["ProblemType"]["UseInitialStridesCD"] and kernelWriter.states.archCaps["HasEccHalf"]) and not (kernel["ProblemType"]["DestDataType"].numRegisters() == 0.25)
+            self.halfDataRegPerVI = gwvw*self.numVgprsPerDataPerVI == 0.5 and not (kernel["ProblemType"]["UseInitialStridesCD"] and (kernelWriter.states.archCaps["HasEccHalf"] or not kernelWriter.states.asmCaps["HasWMMA_V1"])) and not (kernel["ProblemType"]["DestDataType"].numRegisters() == 0.25)
             # indicates the VGPRs index offset from LSU Reduction.
             # Used for multi-batch/Edge cases.
             self.lsuStartVgprOffset = 0
