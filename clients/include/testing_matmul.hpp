@@ -1033,8 +1033,8 @@ void testing_matmul_with_bias(const Arguments& arg,
                               hipDataType      TciB,
                               hipDataType      Tbias)
 {
-    double gpu_time_used, cpu_time_used, gpu_mem_gbytes;
-    gpu_time_used = cpu_time_used = gpu_mem_gbytes = 0.0;
+    double gpu_time_used, cpu_time_used, gpu_mem_gbytes, gpu_time_used_cold;
+    gpu_time_used = cpu_time_used = gpu_mem_gbytes = gpu_time_used_cold = 0.0;
     bool                   HMM                     = arg.HMM;
     hipblaslt_local_handle handle{arg};
     hipStream_t            stream;
@@ -2943,6 +2943,7 @@ void testing_matmul_with_bias(const Arguments& arg,
 
         size_t      best_sol       = -1;
         double      best_flops     = 0.0;
+        double      best_gpu_time_cold  = std::numeric_limits<double>::max();
         double      best_gpu_time  = std::numeric_limits<double>::max();
         double      best_warm_time = std::numeric_limits<double>::max();
         std::string best_s_name    = "";
@@ -3018,10 +3019,10 @@ void testing_matmul_with_bias(const Arguments& arg,
                     if(arg.skip_slow_solution_ratio)
                     {
                         post_gpu_time(arg.use_gpu_timer,
-                                      event_gpu_time_start,
-                                      event_gpu_time_end,
-                                      gpu_time_used,
-                                      stream);
+                                        event_gpu_time_start,
+                                        event_gpu_time_end,
+                                        gpu_time_used,
+                                        stream);
                         best_warm_time
                             = best_warm_time < gpu_time_used ? best_warm_time : gpu_time_used;
                         if((gpu_time_used * arg.skip_slow_solution_ratio) > best_warm_time)
@@ -3047,9 +3048,9 @@ void testing_matmul_with_bias(const Arguments& arg,
                 }
                 else
                 {
-                    if(arg.skip_slow_solution_ratio)
-                        pre_gpu_time(
-                            arg.use_gpu_timer, event_gpu_time_start, gpu_time_used, stream);
+                    // if(arg.skip_slow_solution_ratio)
+                    pre_gpu_time(
+                        arg.use_gpu_timer, event_gpu_time_start, gpu_time_used, stream);
                     for(int i = 0; i < number_cold_calls; i++)
                     {
                         auto ptr_matmul = matmul[i % block_count][0];
@@ -3083,13 +3084,15 @@ void testing_matmul_with_bias(const Arguments& arg,
                         if(i == 0 && (arg.unit_check || arg.norm_check || arg.allclose_check))
                             copy_gemm_to_host(stream, gemm_count, hD_1, (*dDp));
                     }
+                    post_gpu_time(arg.use_gpu_timer,
+                                    event_gpu_time_start,
+                                    event_gpu_time_end,
+                                    gpu_time_used,
+                                    stream);
+                    gpu_time_used_cold = gpu_time_used;
                     if(arg.skip_slow_solution_ratio)
                     {
-                        post_gpu_time(arg.use_gpu_timer,
-                                      event_gpu_time_start,
-                                      event_gpu_time_end,
-                                      gpu_time_used,
-                                      stream);
+
                         best_warm_time
                             = best_warm_time < gpu_time_used ? best_warm_time : gpu_time_used;
                         if((gpu_time_used * arg.skip_slow_solution_ratio) > best_warm_time)
@@ -3378,6 +3381,7 @@ void testing_matmul_with_bias(const Arguments& arg,
                             handle, heuristicResult[sol].algo);
                     }
                 }
+
                 ArgumentModel<argument_param>{}.log_args(
                     Talpha,
                     hipblaslt_cout,
@@ -3390,6 +3394,8 @@ void testing_matmul_with_bias(const Arguments& arg,
                     arg,
                     (uint32_t)tuningVec[heuristicTuningIndex[sol]].splitK,
                     (uint32_t)tuningVec[heuristicTuningIndex[sol]].wgm,
+                    // cold iteration time
+                    gpu_time_used_cold,
                     gpu_time_used,
                     flush_time_used,
                     flops,
@@ -3403,6 +3409,7 @@ void testing_matmul_with_bias(const Arguments& arg,
             {
                 best_sol      = sol;
                 best_flops    = flops;
+                best_gpu_time_cold = gpu_time_used_cold;
                 best_gpu_time = gpu_time_used;
                 best_s_name   = solutionName;
                 best_k_name   = kernelName;
@@ -3448,6 +3455,7 @@ void testing_matmul_with_bias(const Arguments& arg,
                 arg,
                 (uint32_t)tuningVec[heuristicTuningIndex[best_sol]].splitK,
                 (uint32_t)tuningVec[heuristicTuningIndex[best_sol]].wgm,
+                best_gpu_time_cold,
                 best_gpu_time,
                 flush_time_used,
                 best_flops,

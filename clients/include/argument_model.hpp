@@ -59,6 +59,7 @@ public:
     void log_perf(hipblaslt_internal_ostream& name_line,
                   hipblaslt_internal_ostream& val_line,
                   const Arguments&            arg,
+                  double                      gpu_us_cold,
                   double                      gpu_us,
                   double                      flush_us,
                   double                      gflops,
@@ -84,6 +85,10 @@ public:
             gpu_us -= flush_us;
         }
 
+        int64_t cold_calls = arg.cold_iters < 1 ? 1 : arg.cold_iters;
+        if(cold_calls > 1)
+            gpu_us_cold /= cold_calls;
+
         // per/us to per/sec *10^6
         double hipblaslt_gflops = gflops * batch_count / gpu_us * 1e6;
         double hipblaslt_GBps   = gbytes / gpu_us * 1e6;
@@ -104,6 +109,9 @@ public:
 
         name_line << ",us";
         val_line << "," << gpu_us;
+
+        name_line << ",cold_us";
+        val_line << "," << gpu_us_cold;
 
         if(arg.unit_check || arg.norm_check || arg.allclose_check)
         {
@@ -162,6 +170,7 @@ public:
                   const Arguments&            arg,
                   uint32_t                    splitK,
                   uint32_t                    wgm,
+                  double                      gpu_us_cold,
                   double                      gpu_us,
                   double                      flush_us,
                   double                      gflops,
@@ -169,7 +178,8 @@ public:
                   double                      cpu_us = ArgumentLogging::NA_value,
                   double                      norm   = ArgumentLogging::NA_value,
                   double                      atol   = ArgumentLogging::NA_value,
-                  double                      rtol   = ArgumentLogging::NA_value)
+                  double                      rtol   = ArgumentLogging::NA_value
+                  )
     {
         hipblaslt_internal_ostream name_list;
         hipblaslt_internal_ostream value_list;
@@ -247,6 +257,7 @@ public:
             log_perf(name_list,
                      value_list,
                      arg,
+                     gpu_us_cold,
                      gpu_us,
                      flush_us,
                      gflops,
